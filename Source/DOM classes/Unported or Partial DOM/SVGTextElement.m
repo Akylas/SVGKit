@@ -9,6 +9,7 @@
 #import "SVGElement_ForParser.h" // to resolve Xcode circular dependencies; in long term, parsing SHOULD NOT HAPPEN inside any class whose name starts "SVG" (because those are reserved classes for the SVG Spec)
 
 #import "SVGHelperUtilities.h"
+#import "SVGUtils.h"
 
 @implementation SVGTextElement
 
@@ -61,9 +62,11 @@
 	CTFontRef font = NULL;
 	if( actualFamily != nil)
 		font = CTFontCreateWithName( (CFStringRef)actualFamily, effectiveFontSize, NULL);
-	if( font == NULL )
-		font = CTFontCreateWithName( (CFStringRef) @"Verdana", effectiveFontSize, NULL); // Spec says to use "whatever default font-family is normal for your system". On iOS, that's Verdana
-	
+	if( font == NULL ) {
+		// Spec says to use "whatever default font-family is normal for your system". Use HelveticaNeue, the default since iOS 7.
+		font = CTFontCreateWithName( (CFStringRef) @"HelveticaNeue", effectiveFontSize, NULL);
+	}
+
 	/** Convert all whitespace to spaces, and trim leading/trailing (SVG doesn't support leading/trailing whitespace, and doesnt support CR LF etc) */
 	
 	NSString* effectiveText = self.textContent; // FIXME: this is a TEMPORARY HACK, UNTIL PROPER PARSING OF <TSPAN> ELEMENTS IS ADDED
@@ -125,22 +128,38 @@
 	 
 	 If/when Apple fixes their bugs - or if you know enough about their API's to workaround the bugs, feel free to fix this code.
 	 */
-	CGFloat offsetToConvertSVGOriginToAppleOrigin = - suggestedUntransformedSize.height;
+    CTLineRef line = CTLineCreateWithAttributedString( (CFMutableAttributedStringRef) tempString );
+    CGFloat ascent = 0;
+    CTLineGetTypographicBounds(line, &ascent, NULL, NULL);
+    CFRelease(line);
+	CGFloat offsetToConvertSVGOriginToAppleOrigin = -ascent;
 	CGSize fakeSizeToApplyNonTranslatingPartsOfTransform = CGSizeMake( 0, offsetToConvertSVGOriginToAppleOrigin);
 	
 	label.position = CGPointMake( 0,
 								 0 + CGSizeApplyAffineTransform( fakeSizeToApplyNonTranslatingPartsOfTransform, textTransformAbsoluteWithLocalPositionOffset).height);
-	label.anchorPoint = CGPointZero; // WARNING: SVG applies transforms around the top-left as origin, whereas Apple defaults to center as origin, so we tell Apple to work "like SVG" here.
+    
+    NSString *textAnchor = [self cascadedValueForStylableProperty:@"text-anchor"];
+    if( [@"middle" isEqualToString:textAnchor] )
+        label.anchorPoint = CGPointMake(0.5, 0.0);
+    else if( [@"end" isEqualToString:textAnchor] )
+        label.anchorPoint = CGPointMake(1.0, 0.0);
+    else
+        label.anchorPoint = CGPointZero; // WARNING: SVG applies transforms around the top-left as origin, whereas Apple defaults to center as origin, so we tell Apple to work "like SVG" here.
+    
 	label.affineTransform = textTransformAbsoluteWithLocalPositionOffset;
 	label.fontSize = effectiveFontSize;
     label.string = effectiveText;
     label.alignmentMode = kCAAlignmentLeft;
-    label.foregroundColor = [UIColor blackColor].CGColor;
+    
+    label.foregroundColor = [SVGHelperUtilities parseFillForElement:self];
+#if TARGET_OS_IPHONE
+    label.contentsScale = [[UIScreen mainScreen] scale];
+#endif
 
 	/** VERY USEFUL when trying to debug text issues:
 	label.backgroundColor = [UIColor colorWithRed:0.5 green:0 blue:0 alpha:0.5].CGColor;
 	label.borderColor = [UIColor redColor].CGColor;
-	//DEBUG: DDLogVerbose(@"font size %2.1f at %@ ... final frame of layer = %@", effectiveFontSize, NSStringFromCGPoint(transformedOrigin), NSStringFromCGRect(label.frame));
+	//DEBUG: SVGKitLogVerbose(@"font size %2.1f at %@ ... final frame of layer = %@", effectiveFontSize, NSStringFromCGPoint(transformedOrigin), NSStringFromCGRect(label.frame));
 	*/
 	
     return label;

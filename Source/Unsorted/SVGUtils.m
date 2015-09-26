@@ -343,8 +343,8 @@ SVGColor SVGColorFromString (const char *string) {
 		}
 		else if( strlen(hexString) == 3 )
 		{
-			char r[3], g[3], b[3];
-			r[2] = g[2] = b[2] = '\0';
+			char r[2], g[2], b[2];
+			r[1] = g[1] = b[1] = '\0';
 			
 			strncpy(r, hexString, 1);
 			strncpy(g, hexString + 1, 1);
@@ -376,7 +376,7 @@ CGFloat SVGPercentageFromString (const char *string) {
 	size_t len = strlen(string);
 	
 	if (string[len-1] != '%') {
-		DDLogCWarn(@"Invalid percentage: %s", string);
+		SVGKitLogWarn(@"Invalid percentage: %s", string);
 		return -1;
 	}
 	

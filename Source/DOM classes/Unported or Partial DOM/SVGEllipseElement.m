@@ -28,31 +28,38 @@
 - (void)postProcessAttributesAddingErrorsTo:(SVGKParseResult *)parseResult {
 	[super postProcessAttributesAddingErrorsTo:parseResult];
 	
+	SVGRect r = parseResult.rootOfSVGTree.viewport;
+	
 	if( [[self getAttribute:@"cx"] length] > 0 )
-	self.cx = [[self getAttribute:@"cx"] floatValue];
-	
-	if( [[self getAttribute:@"cy"] length] > 0 )
-	self.cy = [[self getAttribute:@"cy"] floatValue];
-	
-	if( [[self getAttribute:@"rx"] length] > 0 )
-	self.rx = [[self getAttribute:@"rx"] floatValue];
-	
-	if( [[self getAttribute:@"ry"] length] > 0 )
-	self.ry = [[self getAttribute:@"ry"] floatValue];
-	
-	if( [[self getAttribute:@"r"] length] > 0 ) { // circle
-		self.ry = self.rx = [[self getAttribute:@"r"] floatValue];
+	{
+		self.cx = [[SVGLength svgLengthFromNSString:[self getAttribute:@"cx"] ]
+		 			pixelsValueWithDimension:r.width];
 	}
-}
-
--(CALayer *)newLayer
-{
-	CGMutablePathRef path = CGPathCreateMutable();
-	CGPathAddEllipseInRect(path, NULL, CGRectMake(_cx - _rx, _cy - _ry, _rx * 2, _ry * 2));
-	
-	CALayer* result = [SVGHelperUtilities newCALayerForPathBasedSVGElement:self withPath:path];
-	CGPathRelease(path);
-	return result;
+	if( [[self getAttribute:@"cy"] length] > 0 )
+	{
+		self.cy = [[SVGLength svgLengthFromNSString:[self getAttribute:@"cy"] ]
+				   pixelsValueWithDimension:r.height];
+	}
+	if( [[self getAttribute:@"rx"] length] > 0 )
+	{
+		self.rx  = [[SVGLength svgLengthFromNSString:[self getAttribute:@"rx"] ]
+					pixelsValueWithDimension:r.width];
+	}
+	if( [[self getAttribute:@"ry"] length] > 0 )
+	{
+		self.ry =  [[SVGLength svgLengthFromNSString:[self getAttribute:@"ry"] ]
+					 pixelsValueWithDimension:r.height];
+	}
+	if( [[self getAttribute:@"r"] length] > 0 ) { // circle
+		
+		self.ry = self.rx = [[SVGLength svgLengthFromNSString:[self getAttribute:@"r"] ]
+							 pixelsValueWithDimension:hypot(r.width, r.height)/M_SQRT2];
+	}
+    
+    CGMutablePathRef path = CGPathCreateMutable();
+	CGPathAddEllipseInRect(path, NULL, CGRectMake(self.cx - self.rx, self.cy - self.ry, self.rx * 2, self.ry * 2));
+	self.pathForShapeInRelativeCoords = path;
+    CGPathRelease(path);
 }
 
 @end

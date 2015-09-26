@@ -15,14 +15,53 @@ typedef struct {
 	CGFloat offY;
 } PathInfo;
 
+CGFloat fixInfinity(CGFloat inputFloat){
+    if(inputFloat>CGFLOAT_MAX) inputFloat=CGFLOAT_MAX;
+    if(inputFloat<(-1)*CGFLOAT_MAX) inputFloat=(-1)*CGFLOAT_MAX;
+    return inputFloat;
+}
+
+CGPoint *fixPointsInfinity(const CGPathElement *element){
+    int i,total;
+    
+    switch (element->type) {
+        case kCGPathElementMoveToPoint:
+            total=1;
+            break;
+        case kCGPathElementAddLineToPoint:
+            total=1;
+            break;
+        case kCGPathElementAddQuadCurveToPoint:
+            total=2;
+            break;
+        case kCGPathElementAddCurveToPoint:
+            total=3;
+            break;
+        default:
+            total=0;
+            break;
+    }
+	
+	if( total == 0 )
+		return NULL; // Avoid malloc(0); keep C compilers happy
+	
+	CGPoint* returnArray = malloc(sizeof(CGPoint) * total);
+    for (i = 0; i < total; i++)
+    {
+        returnArray[i].x=fixInfinity(element->points[i].x);
+        returnArray[i].y=fixInfinity(element->points[i].y);
+    }
+    return returnArray;
+}
+
 void applier (void *info, const CGPathElement *element) {
 	PathInfo *pathInfo = (PathInfo *) info;
 	
 	CGMutablePathRef path = pathInfo->path;
-	CGFloat x = pathInfo->offX;
-	CGFloat y = pathInfo->offY;
-	
-	const CGPoint *points = element->points;
+	CGFloat x = fixInfinity(pathInfo->offX);
+	CGFloat y = fixInfinity(pathInfo->offY);
+    
+	CGPoint *points = fixPointsInfinity(element);
 	
 	switch (element->type) {
 		case kCGPathElementMoveToPoint:
@@ -44,6 +83,8 @@ void applier (void *info, const CGPathElement *element) {
 			CGPathCloseSubpath(path);
 			break;
 	}
+	
+	free(points);
 }
 
 CGPathRef CGPathCreateByOffsettingPath (CGPathRef aPath, CGFloat x, CGFloat y) {
@@ -51,8 +92,8 @@ CGPathRef CGPathCreateByOffsettingPath (CGPathRef aPath, CGFloat x, CGFloat y) {
 	
 	PathInfo *info = (PathInfo *) malloc(sizeof(PathInfo));
 	info->path = path;
-	info->offX = x;
-	info->offY = y;
+	info->offX = fixInfinity(x);
+	info->offY = fixInfinity(y);
 	
 	CGPathApply(aPath, info, &applier);
 	free(info);
@@ -64,10 +105,10 @@ void applyPathTranslation (void *info, const CGPathElement *element) {
 	PathInfo *pathInfo = (PathInfo *) info;
 	
 	CGMutablePathRef path = pathInfo->path;
-	CGFloat x = pathInfo->offX;
-	CGFloat y = pathInfo->offY;
+	CGFloat x = fixInfinity(pathInfo->offX);
+	CGFloat y = fixInfinity(pathInfo->offY);
 	
-	const CGPoint *points = element->points;
+	CGPoint *points = fixPointsInfinity(element);
 	
 	switch (element->type) {
 		case kCGPathElementMoveToPoint:
@@ -89,6 +130,8 @@ void applyPathTranslation (void *info, const CGPathElement *element) {
 			CGPathCloseSubpath(path);
 			break;
 	}
+	
+	free(points);
 }
 
 CGPathRef CGPathCreateByTranslatingPath (CGPathRef aPath, CGFloat x, CGFloat y) {
@@ -96,8 +139,8 @@ CGPathRef CGPathCreateByTranslatingPath (CGPathRef aPath, CGFloat x, CGFloat y) 
 	
 	PathInfo *info = (PathInfo *) malloc(sizeof(PathInfo));
 	info->path = path;
-	info->offX = x;
-	info->offY = y;
+	info->offX = fixInfinity(x);
+	info->offY = fixInfinity(y);
 	
 	CGPathApply(aPath, info, &applyPathTranslation);
 	free(info);

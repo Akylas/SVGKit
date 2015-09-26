@@ -33,6 +33,8 @@
 	if( newImage == _SVGImage )
 		return;
 	
+	self.startRenderTime = self.endRenderTime = nil; // set to nil, so that watchers know it hasn't loaded yet
+	
 	/** 1: remove old */
 	if( _SVGImage != nil )
 	{
@@ -47,13 +49,21 @@
 	if( _SVGImage != nil )
 	{
 		[_SVGImage retain];
+		self.startRenderTime = [NSDate date];
 		[self addSublayer:_SVGImage.CALayerTree];
+		self.endRenderTime = [NSDate date];
 	}
 }
 
 - (void)dealloc
 {
 	//FIXME: Apple crashes on this line, even though BY DEFINITION Apple should not be crashing: [self removeObserver:self forKeyPath:@"showBorder"];
+	@try {
+		[self removeObserver:self forKeyPath:@"showBorder"];
+	}
+	@catch (NSException *exception) {
+		SVGKitLogError(@"Exception removing showBorder observer");
+	}
 	
 	self.SVGImage = nil;
 	

@@ -5,6 +5,7 @@
 #import "DOMGlobalSettings.h"
 
 #define INCHES_PER_CENTIMETRE ( 0.393700787f )
+#define INCHES_PER_MILLIMETER ( 0.0393701f )
 
 @interface CSSPrimitiveValue()
 
@@ -77,7 +78,7 @@
 				}break;
 				case CSS_MM:
 				{
-					valueAsInches = self.internalValue * INCHES_PER_CENTIMETRE * 10.0f;
+					valueAsInches = self.internalValue * INCHES_PER_MILLIMETER;
 				}break;
 				case CSS_PT:
 				{
@@ -87,7 +88,11 @@
 				{
 					valueAsInches = self.internalValue * 12.0f / 72.0f;
 				}break;
-				
+				case CSS_IN:
+				{
+					valueAsInches = self.internalValue;
+				}break;
+					
 				default:
 				{
 					NSAssert( FALSE, @"This line is impossible but Apple's compiler is crap" );
@@ -102,7 +107,7 @@
 				}break;
 				case CSS_MM:
 				{
-					return valueAsInches / INCHES_PER_CENTIMETRE * 10.0f;
+					return valueAsInches / INCHES_PER_MILLIMETER;
 				}break;
 				case CSS_PT:
 				{
@@ -286,7 +291,7 @@
 		{
 			/* Option 2: it's a string - or corrupt, which we're not going to handle here */
 #if DEBUG_DOM_PARSING
-			DDLogVerbose(@"[%@] WARNING: not bothering to work out 'what kind of CSS string' this string is. CSS is stupid. String = %@", [self class], _cssText );
+			SVGKitLogVerbose(@"[%@] WARNING: not bothering to work out 'what kind of CSS string' this string is. CSS is stupid. String = %@", [self class], _cssText );
 #endif
 			[self setStringValue:CSS_STRING stringValue:_cssText]; // -------- NB: we allow any string-to-string conversion, so it's not a huge problem that we dont correctly detect "url" versus "other kind of string". I hate CSS Parsing...
 		}

@@ -19,6 +19,7 @@
 
 #import "DOMHelperUtilities.h"
 #import "SVGCircleElement.h"
+#import "SVGClipPathElement.h"
 #import "SVGDefsElement.h"
 #import "SVGDescriptionElement.h"
 #import "SVGKImage.h"
@@ -40,6 +41,11 @@
 #import "SVGKFastImageView.h"
 #import "SVGKLayeredImageView.h"
 #import "SVGKLayer.h"
+#import "TinySVGTextAreaElement.h"
+
+#ifndef SVGKIT_LOG_CONTEXT
+    #define SVGKIT_LOG_CONTEXT 556
+#endif
 
 @interface SVGKit : NSObject
 

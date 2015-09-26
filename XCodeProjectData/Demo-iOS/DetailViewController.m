@@ -14,12 +14,53 @@
 #import "SVGKFastImageView.h"
 #import "SVGKLayeredImageView.h"
 
+#import "SVGKSourceURL.h"
+#import "SVGKSourceLocalFile.h"
+#import "SVGKSourceNSData.h"
+#import "SVGKSourceString.h"
+
+
+@interface ImageLoadingOptions : NSObject
+@property(nonatomic) BOOL requiresLayeredImageView;
+@property(nonatomic) CGSize overrideImageSize;
+@property(nonatomic) float overrideImageRenderScale; 
+@property(nonatomic,retain) SVGKSourceLocalFile* localFileSource;
+- (id)initWithSource:(SVGKSource*) source;
+@end
+@implementation ImageLoadingOptions
+- (id)initWithSource:(SVGKSource*) source
+{
+    self = [super init];
+    if (self) {
+		if( [source isKindOfClass:[SVGKSourceLocalFile class]])
+		self.localFileSource = (SVGKSourceLocalFile*) source;
+		else
+			; // cannot auto-select loading options for anything except local files / bundle files
+		
+        self.overrideImageRenderScale = 1.0;
+		self.overrideImageSize = CGSizeZero;
+    }
+    return self;
+}
+@end
+
 @interface DetailViewController ()
 
 @property (nonatomic, retain) UIPopoverController *popoverController;
 
-- (void)loadResource:(NSString *)name;
+@property (nonatomic, retain) NSDate* startParseTime, * endParseTime;
+
+- (void)loadSVGFrom:(SVGKSource *) svgSource;
 - (void)shakeHead;
+
+/** Apple's NSTimer class is an old OS X class that doesn't place nicely with ObjC blocks
+ (Apple needs to upgrade it). It sets up some nasty retain cycles and you can't set
+ the .userInfo after its started (a side-effect of the internal retain'ing Apple does)
+ 
+ By storing this reference here, we can give a block a reference in advance, while also
+ giving the block's output to the timer as .userinfo at creation time
+ */
+@property (nonatomic, retain) NSTimer* tickerLoadingApplesNSTimerSucks;
 
 @end
 
@@ -29,7 +70,6 @@
 
 @synthesize toolbar, popoverController, contentView, detailItem;
 @synthesize viewActivityIndicator;
-@synthesize name = _name;
 @synthesize exportText = _exportText;
 @synthesize layerExporter = _layerExporter;
 @synthesize tapGestureRecognizer = _tapGestureRecognizer;
@@ -48,7 +88,7 @@
 	self.toolbar = nil;
 	self.detailItem = nil;
 	
-	self.name = nil;
+	self.sourceOfCurrentDocument = nil;
 	self.exportText = nil;
 	self.exportLog = nil;
 	self.layerExporter = nil;
@@ -61,6 +101,8 @@
 
 -(void)viewDidLoad
 {
+	[super viewDidLoad];
+	
 	self.navigationItem.rightBarButtonItems = [NSArray arrayWithObjects:
 											   [[[UIBarButtonItem alloc] initWithTitle:@"Debug" style:UIBarButtonItemStyleBordered target:self action:@selector(showHideBorder:)] autorelease],
 											   [[[UIBarButtonItem alloc] initWithTitle:@"Animate" style:UIBarButtonItemStyleBordered target:self action:@selector(animate:)] autorelease],
@@ -278,11 +320,15 @@ CATextLayer *textLayerForLastTappedLayer;
 		[self deselectTappedLayer]; // do this first because it DEPENDS UPON the type of self.contentView BEFORE the change in value
 		
 		[detailItem release];
+		
+		if( newDetailItem != nil )
+		{
 		detailItem = [newDetailItem retain];
 		
 		// FIXME: re-write this class so that this method does NOT require self.view to exist
 		[self view]; // Apple's design to trigger the creation of view. Original design of THIS class is that it breaks if view isn't already existing
-		[self loadResource:newDetailItem];
+		[self loadSVGFrom:newDetailItem];
+		}
 	}
 	
 	if (self.popoverController) {
@@ -290,34 +336,64 @@ CATextLayer *textLayerForLastTappedLayer;
 	}
 }
 
-- (void)loadResource:(NSString *)name
+-(void) willLoadNewResource
 {
+	// update the view
+	self.subViewLoadingPopup.hidden = FALSE;
+	self.progressLoading.progress = 0;
 	[self.viewActivityIndicator startAnimating];
-	[[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]]; // makes the animation appear
+	/** Move the gesture recognizer off the old view */
+	if( self.contentView != nil
+	   && self.tapGestureRecognizer != nil )
+		[self.contentView removeGestureRecognizer:self.tapGestureRecognizer];
 	
-	SVGKImageView* newContentView = nil;
-	BOOL thisImageRequiresLayeredImageView = false;
-	CGSize customSizeForImage = CGSizeZero;
-    
+	[self.labelParseTime removeFromSuperview]; // we'll re-add to the new one
+	[self.contentView removeFromSuperview];
+}
+
+/**
+ If you want to emulate Apple's @2x naming system for UIImage, you can...
+ */
+-(void) preProcessImageFor2X:(ImageLoadingOptions*) options
+{
 #if ALLOW_2X_STYLE_SCALING_OF_SVGS_AS_AN_EXAMPLE
-	BOOL shouldScaleTimesTwo = false;
-	if( [name hasSuffix:@"@2x"])
+	if( [options.localFileSource.filePath hasSuffix:@"@2x"])
 	{
-		name = [name substringToIndex:name.length - @"@2x".length];
-		shouldScaleTimesTwo = true;
-		thisImageRequiresLayeredImageView = true;
+		SVGKSourceLocalFile* modifiedSource = [[options.localFileSource copy] autorelease];
+		modifiedSource.filePath = [modifiedSource.filePath substringToIndex:modifiedSource.filePath.length - @"@2x".length];
+		options.overrideImageRenderScale = 2.0;
+		options.requiresLayeredImageView = true;
+		options.localFileSource = modifiedSource;
 	}
 #endif
-	
-	if( [name hasSuffix:@"@160x240"])
+}
+
+/**
+ If you want to emulate Apple's @WxH naming system for UIImage, you can...
+ */
+-(void) preProcessImageForAt160x240:(ImageLoadingOptions*) options
+{
+	if( [options.localFileSource.filePath hasSuffix:@"@160x240"]) // could be any 999x999 you want, up to you to implement!
 	{
-		name = [name substringToIndex:name.length - @"@160x240".length];
-		customSizeForImage = CGSizeMake( 160, 240 );
+		SVGKSourceLocalFile* modifiedSource = [[options.localFileSource copy] autorelease];
+		
+		modifiedSource.filePath = [modifiedSource.filePath substringToIndex:modifiedSource.filePath.length - @"@160x240".length];
+		options.overrideImageSize = CGSizeMake( 160, 240 );
+		
+		options.localFileSource = modifiedSource;
 	}
-	
+}
+
+/**
+ Sometimes you HAVE to use an SVGKLayeredImageView...
+ */
+-(void) preProcessImageCheckWorkaroundAppleBugInGradientImages:(ImageLoadingOptions*) options
+{
 	if(
-	   [name  isEqualToString:@"Monkey"] // Monkey uses layer-animations, so REQUIRES the layered version of SVGKImageView
-	   || [name isEqualToString:@"RainbowWing"] // RainbodWing uses gradient-fills, so REQUIRES the layered version of SVGKImageView
+	   [options.localFileSource.filePath  isEqualToString:@"Monkey"] // Monkey uses layer-animations, so REQUIRES the layered version of SVGKImageView
+	   || [options.localFileSource.filePath isEqualToString:@"RainbowWing"] // RainbowWing uses gradient-fills, so REQUIRES the layered version of SVGKImageView
+	   || [options.localFileSource.filePath isEqualToString:@"imagetag-layered"] // uses gradients for prettiness
+	   || [options.localFileSource.filePath isEqualToString:@"parent-clip"] // uses layer animations
 	   )
 	{
 		/**
@@ -338,95 +414,200 @@ CATextLayer *textLayerForLastTappedLayer;
 		 The solution: there are two versions of SVGKImageView - a "normal" one, and a "weaker one that doesnt use renderInContext"
 		 
 		 */
-		thisImageRequiresLayeredImageView = true;
+		options.requiresLayeredImageView = true;
 	}
+}
+
+- (void)loadSVGFrom:(SVGKSource *) svgSource
+{
+	[self willLoadNewResource];
+	[[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]]; // makes the animation appear
+	
+	self.startParseTime = self.endParseTime = [NSDate date]; // reset them
+	
+	SVGKImage *document = nil;
+		ImageLoadingOptions* loadingOptions = [[[ImageLoadingOptions alloc] initWithSource:svgSource] autorelease];
+	
+	/** Detect URL vs file */
+	self.startParseTime = [NSDate date];
+	if( [svgSource isKindOfClass:[SVGKSourceURL class]])
+	{
+		@try
+		{
+			/**
+			 This would work, but won't let us read any errors:
+			 
+		document = [SVGKImage imageWithContentsOfURL:[NSURL URLWithString:name]];
+			 
+			 so, instead, we create an SVGKSource explicitly (as this demo app is taking
+			 user-input, and we have no idea how valid it is!)
+			 
+			 
+			 */
+			document = [SVGKImage imageWithSource:svgSource];
+			
+			[self internalLoadedResource:svgSource withOptions:loadingOptions parserOutput:(document==nil)?nil:document.parseErrorsAndWarnings  createImageViewFromDocument:document];
+		}
+		@catch( NSException* e )
+		{
+			[[[[UIAlertView alloc] initWithTitle:@"SVG load failed" message:[NSString stringWithFormat:@"Error = %@", e] delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] autorelease] show];
+			
+			[self internalLoadedResource:svgSource withOptions:loadingOptions parserOutput:nil createImageViewFromDocument:nil];
+		}
+		
+	}
+	else if( [svgSource isKindOfClass:[SVGKSourceLocalFile class]])
+	{
+		
+	/** This demo shows different images being used in different ways.
+	 Here we setup special conditions based on the filename etc:
+	 */
+
+	[self preProcessImageFor2X:loadingOptions];
+	[self preProcessImageForAt160x240:loadingOptions];
+	[self preProcessImageCheckWorkaroundAppleBugInGradientImages:loadingOptions];
 	
 	/** Detect the magic name(s) for the nil-demos */
-	if( [name isEqualToString:@"nil-demo-layered-imageview"])
+	if( svgSource == nil )
 	{
 		/** This demonstrates / tests what happens if you create an SVGKLayeredImageView with a nil SVGKImage
-		 
-		 NB: this is what Apple's InterfaceBuilder / Xcode 4 FORCES YOU TO DO because of massive bugs in Xcode 4!
 		 */
-		newContentView = [[[SVGKLayeredImageView alloc] initWithCoder:nil] autorelease];
+		[self didLoadNewResourceCreatingImageView:[[[SVGKLayeredImageView alloc] initWithCoder:nil] autorelease]];
 	}
 	else
 	{
 		/**
-		 FINALLY:
-		 
-		 the actual loading of the SVG file and making a view to display it!
+		 the actual loading of the SVG file
 		 */
-		
-		SVGKImage *document = nil;
-		
-		/** Detect URL vs file */
-		if( [name hasPrefix:@"http://"])
-		{
-			document = [SVGKImage imageWithContentsOfURL:[NSURL URLWithString:name]];
-		}
-		else
-			document = [SVGKImage imageNamed:[name stringByAppendingPathExtension:@"svg"]];
-		
-#if ALLOW_2X_STYLE_SCALING_OF_SVGS_AS_AN_EXAMPLE
-		if( shouldScaleTimesTwo )
-			document.scale = 2.0;
-#endif
-		
-		if( document == nil )
-		{
-			[[[[UIAlertView alloc] initWithTitle:@"SVG parse failed" message:@"Total failure. See console log" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] autorelease] show];
-			newContentView = nil; // signals to the rest of this method: the load failed
-		}
-		else
-		{
-			if( document.parseErrorsAndWarnings.rootOfSVGTree != nil )
-			{
-				//NSLog(@"[%@] Freshly loaded document (name = %@) has size = %@", [self class], name, NSStringFromCGSize(document.size) );
-				
-				/** NB: the SVG Spec says that the "correct" way to upscale or downscale an SVG is by changing the
-				 SVG Viewport. SVGKit automagically does this for you if you ever set a value to image.scale */
-				if( ! CGSizeEqualToSize( CGSizeZero, customSizeForImage ) )
-					document.size = customSizeForImage; // preferred way to scale an SVG! (standards compliant!)
 
-				if( thisImageRequiresLayeredImageView )
-				{
-					newContentView = [[[SVGKLayeredImageView alloc] initWithSVGKImage:document] autorelease];
-				}
-				else
-				{
-					newContentView = [[[SVGKFastImageView alloc] initWithSVGKImage:document] autorelease];
-					
-					NSLog(@"[%@] WARNING: workaround for Apple bugs: UIScrollView spams tiny changes to the transform to the content view; currently, we have NO WAY of efficiently measuring whether or not to re-draw the SVGKImageView. As a temporary solution, we are DISABLING the SVGKImageView's auto-redraw-at-higher-resolution code - in general, you do NOT want to do this", [self class]);
-					
-					((SVGKFastImageView*)newContentView).disableAutoRedrawAtHighestResolution = TRUE;
-				}
+		
+#if LOAD_SYNCHRONOUSLY
+			document = [SVGKImage imageNamed:[name stringByAppendingPathExtension:@"svg"]];
+			[self internalLoadedResource:name withOptions:loadingOptions createImageViewFromDocument:document];
+#else
+			SVGKParser* parser = [SVGKImage imageWithSource:svgSource
+											   onCompletion:^(SVGKImage *loadedImage, SVGKParseResult* parseResult)
+			{
+				[self.tickerLoadingApplesNSTimerSucks invalidate];
+				dispatch_async(dispatch_get_main_queue(), ^{
+					// must be on main queue since this affects the UIKit GUI!
+					[self internalLoadedResource:svgSource withOptions:loadingOptions parserOutput:parseResult createImageViewFromDocument:loadedImage];
+				});
+			}];
+			self.tickerLoadingApplesNSTimerSucks = [NSTimer scheduledTimerWithTimeInterval:0.5 target:self selector:@selector(tickLoadingSVG:) userInfo:parser repeats:TRUE];
+#endif
+		}
+	}
+	else
+	{
+		[[[[UIAlertView alloc] initWithTitle:@"SVG load failed" message:[NSString stringWithFormat:@"Unknown kind of source. Should be a recognized SVGKSource subclass. Was actually : %@", [svgSource class]] delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] autorelease] show];
+		
+		[self internalLoadedResource:nil withOptions:loadingOptions parserOutput:nil createImageViewFromDocument:nil];
+	}
+}
+
+/** Updates the on-screen loading bar */
+-(void) tickLoadingSVG:(NSTimer*) timer
+{
+	SVGKParser* parser = (SVGKParser*) timer.userInfo;
+	
+	dispatch_async(dispatch_get_main_queue(),
+	^{
+		// must be on main queue since this affects the UIKit GUI!
+		self.progressLoading.progress = parser.currentParseRun.parseProgressFractionApproximate;
+	});
+}
+
+/**
+ Creates an appopriate SVGKImageView to display the loaded SVGKImage, and triggers the post-processing
+ of on-screen displays
+ */
+-(void) internalLoadedResource:(SVGKSource*) source withOptions:(ImageLoadingOptions*) loadingOptions parserOutput:(SVGKParseResult*) parseResult createImageViewFromDocument:(SVGKImage*) document
+{
+	self.endParseTime = [NSDate date];
+	
+	SVGKImageView* newContentView = nil;
+	if( loadingOptions.overrideImageRenderScale != 1.0 )
+		document.scale = loadingOptions.overrideImageRenderScale;
+	
+	if( document == nil )
+	{
+		if( parseResult == nil )
+		{
+		[[[[UIAlertView alloc] initWithTitle:@"SVG parse failed" message:@"Total failure. See console log" delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] autorelease] show];
+		}
+		else
+		{
+		[[[[UIAlertView alloc] initWithTitle:@"SVG parse failed" message:[NSString stringWithFormat:@"Summary: %@",parseResult] delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] autorelease] show];			
+		}
+		newContentView = nil; // signals to the rest of this method: the load failed
+	}
+	else
+	{
+		if( document.parseErrorsAndWarnings.rootOfSVGTree != nil )
+		{
+			//NSLog(@"[%@] Freshly loaded document (name = %@) has size = %@", [self class], name, NSStringFromCGSize(document.size) );
+			
+			/** NB: the SVG Spec says that the "correct" way to upscale or downscale an SVG is by changing the
+			 SVG Viewport. SVGKit automagically does this for you if you ever set a value to image.scale */
+			if( ! CGSizeEqualToSize( CGSizeZero, loadingOptions.overrideImageSize ) )
+				document.size = loadingOptions.overrideImageSize; // preferred way to scale an SVG! (standards compliant!)
+			
+			if( loadingOptions.requiresLayeredImageView )
+			{
+				newContentView = [[[SVGKLayeredImageView alloc] initWithSVGKImage:document] autorelease];
 			}
 			else
 			{
-				[[[[UIAlertView alloc] initWithTitle:@"SVG parse failed" message:[NSString stringWithFormat:@"%i fatal errors, %i warnings. First fatal = %@",[document.parseErrorsAndWarnings.errorsFatal count],[document.parseErrorsAndWarnings.errorsRecoverable count]+[document.parseErrorsAndWarnings.warnings count], ((NSError*)[document.parseErrorsAndWarnings.errorsFatal objectAtIndex:0]).localizedDescription] delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] autorelease] show];
-				newContentView = nil; // signals to the rest of this method: the load failed
-
+				newContentView = [[[SVGKFastImageView alloc] initWithSVGKImage:document] autorelease];
+				
+				NSLog(@"[%@] WARNING: workaround for Apple bugs: UIScrollView spams tiny changes to the transform to the content view; currently, we have NO WAY of efficiently measuring whether or not to re-draw the SVGKImageView. As a temporary solution, we are DISABLING the SVGKImageView's auto-redraw-at-higher-resolution code - in general, you do NOT want to do this", [self class]);
+				
+				((SVGKFastImageView*)newContentView).disableAutoRedrawAtHighestResolution = TRUE;
 			}
+		}
+		
+		if( parseResult.errorsFatal.count > 0 )
+		{
+			[[[[UIAlertView alloc] initWithTitle:@"SVG parse failed" message:[NSString stringWithFormat:@"%@",parseResult] delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] autorelease] show];
+//			[[[[UIAlertView alloc] initWithTitle:@"SVG parse failed" message:[NSString stringWithFormat:@"%i fatal errors, %i warnings. First fatal = %@",[document.parseErrorsAndWarnings.errorsFatal count],[document.parseErrorsAndWarnings.errorsRecoverable count]+[document.parseErrorsAndWarnings.warnings count], ((NSError*)[document.parseErrorsAndWarnings.errorsFatal objectAtIndex:0]).localizedDescription] delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] autorelease] show];
+			newContentView = nil; // signals to the rest of this method: the load failed
+			
 		}
 	}
 	
+	self.sourceOfCurrentDocument = source;
+	
+	[self didLoadNewResourceCreatingImageView:newContentView];
+}
+
+/**
+ Reconfigures the view to display the newly-loaded image, and display meta info
+ about how long it took to parse, etc
+ */
+-(void) didLoadNewResourceCreatingImageView:(SVGKImageView*) newContentView
+{
 	if( newContentView != nil )
 	{
 		/**
 		 * NB: at this point we're guaranteed to have a "new" replacemtent ready for self.contentView
 		 */
 		
-		/** Move the gesture recognizer off the old view */
-		if( self.contentView != nil
-		   && self.tapGestureRecognizer != nil )
-			[self.contentView removeGestureRecognizer:self.tapGestureRecognizer];
-		
-		[self.contentView removeFromSuperview];
-		
 		/******* swap the new contentview in ************/
 		self.contentView = newContentView;
 		
+		if( self.labelParseTime == nil )
+		{
+			self.labelParseTime = [[[UILabel alloc] init] autorelease];
+			self.labelParseTime.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+			self.labelParseTime.backgroundColor = [UIColor colorWithWhite:1 alpha:0.5];
+			self.labelParseTime.textColor = [UIColor blackColor];
+			self.labelParseTime.text = @"(parsing)";
+		}
+		/** Workaround for Apple 10 years old bug in OS X that they ported to iOS :( */
+		self.labelParseTime.frame = CGRectMake( 0, 0, self.contentView.bounds.size.width, 20.0 );
+		
+		[self.contentView addSubview:self.labelParseTime];
 	
 		/** set the border for new item */
 		self.contentView.showBorder = FALSE;
@@ -438,13 +619,6 @@ CATextLayer *textLayerForLastTappedLayer;
 		}
 		[self.contentView addGestureRecognizer:self.tapGestureRecognizer];
 		
-		if (_name) {
-			[_name release];
-			_name = nil;
-		}
-		
-		_name = [name copy];
-		
 		[self.scrollViewForSVG addSubview:self.contentView];
 		[self.scrollViewForSVG setContentSize: self.contentView.frame.size];
 		
@@ -452,6 +626,12 @@ CATextLayer *textLayerForLastTappedLayer;
 		
 		self.scrollViewForSVG.minimumZoomScale = MIN( 1, screenToDocumentSizeRatio );
 		self.scrollViewForSVG.maximumZoomScale = MAX( 1, screenToDocumentSizeRatio );
+		
+		self.title = self.sourceOfCurrentDocument.keyForAppleDictionaries;
+		self.labelParseTime.text = [NSString stringWithFormat:@"%@ (parsed: %.2f secs, rendered: %.2f secs)", self.sourceOfCurrentDocument.keyForAppleDictionaries, [self.endParseTime timeIntervalSinceDate:self.startParseTime], self.contentView.timeIntervalForLastReRenderOfSVGFromMemory ];
+		
+		/** Fast image view renders asynchronously, so we have to wait for a callback that its finished a render... */
+		[self.contentView addObserver:self forKeyPath:@"timeIntervalForLastReRenderOfSVGFromMemory" options:0 context:nil];
 		
 		/**
 		 EXAMPLE:
@@ -465,12 +645,26 @@ CATextLayer *textLayerForLastTappedLayer;
 	}
 	
 	[self.viewActivityIndicator stopAnimating];
+	self.subViewLoadingPopup.hidden = TRUE;
+}
+
+-(void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
+{
+	
+	if( [keyPath isEqualToString:@"timeIntervalForLastReRenderOfSVGFromMemory" ] )
+	{
+		self.labelParseTime.text = [NSString stringWithFormat:@"%@ (parsed: %.2f secs, rendered: %.2f secs)", self.sourceOfCurrentDocument.keyForAppleDictionaries, [self.endParseTime timeIntervalSinceDate:self.startParseTime], self.contentView.timeIntervalForLastReRenderOfSVGFromMemory ];
+		
+		[self.contentView removeObserver:self forKeyPath:@"timeIntervalForLastReRenderOfSVGFromMemory"];
+	}
 }
 
 - (IBAction)animate:(id)sender {
-	if ([_name isEqualToString:@"Monkey"]) {
+	if ([self.sourceOfCurrentDocument.keyForAppleDictionaries isEqualToString:@"Monkey"]) {
 		[self shakeHead];
-	}
+    } else if ([self.sourceOfCurrentDocument.keyForAppleDictionaries isEqualToString:@"parent-clip"]) {
+        [self moveGreenSquare];
+    }
 }
 
 
@@ -485,6 +679,19 @@ CATextLayer *textLayerForLastTappedLayer;
 	animation.toValue = [NSNumber numberWithFloat:-0.1f];
 	
 	[layer addAnimation:animation forKey:@"shakingHead"];
+}
+
+- (void)moveGreenSquare {
+    CALayer *layer = [self.contentView.image layerWithIdentifier:@"greensquare"];
+    
+    CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"position"];
+    animation.duration = 1;
+    animation.autoreverses = YES;
+    animation.repeatCount = 100000;
+    animation.fromValue = [NSValue valueWithCGPoint:CGPointMake(50, 50)];
+    animation.toValue = [NSValue valueWithCGPoint:CGPointMake(-50, -50)];
+    
+    [layer addAnimation:animation forKey:@"moveGreenSquare"];
 }
 
 - (IBAction) showHideBorder:(id)sender

@@ -37,33 +37,39 @@
     }
     return self;
 }
+
+-(NSString *)description
+{
+	return [NSString stringWithFormat:@"[Parse result: %lu warnings, %lu errors(recoverable), %lu errors (fatal). %@%@", (unsigned long)self.warnings.count, (unsigned long)self.errorsRecoverable.count, (unsigned long)self.errorsFatal.count, (self.errorsFatal.count > 0)?@"First fatal error: ":@"Last recoverable error: ", self.errorsFatal.count > 0 ? [self.errorsFatal firstObject] : self.errorsRecoverable.count > 0 ? [self.errorsRecoverable lastObject] : @"(n/a)"];
+}
+
 -(void) addSourceError:(NSError*) fatalError
 {
-	DDLogError(@"[%@] SVG ERROR: %@", [self class], fatalError);
+	SVGKitLogError(@"[%@] SVG ERROR: %@", [self class], fatalError);
 	[self.errorsRecoverable addObject:fatalError];
 }
 
 -(void) addParseWarning:(NSError*) warning
 {
-	DDLogWarn(@"[%@] SVG WARNING: %@", [self class], warning);
+	SVGKitLogWarn(@"[%@] SVG WARNING: %@", [self class], warning);
 	[self.warnings addObject:warning];
 }
 
 -(void) addParseErrorRecoverable:(NSError*) recoverableError
 {
-	DDLogWarn(@"[%@] SVG WARNING (recoverable): %@", [self class], recoverableError);
+	SVGKitLogWarn(@"[%@] SVG WARNING (recoverable): %@", [self class], recoverableError);
 	[self.errorsRecoverable addObject:recoverableError];
 }
 
 -(void) addParseErrorFatal:(NSError*) fatalError
 {
-	DDLogError(@"[%@] SVG ERROR: %@", [self class], fatalError);
+	SVGKitLogError(@"[%@] SVG ERROR: %@", [self class], fatalError);
 	[self.errorsFatal addObject:fatalError];
 }
 
 -(void) addSAXError:(NSError*) saxError
 {
-	DDLogWarn(@"[%@] SVG ERROR: %@", [self class], [saxError localizedDescription]);
+	SVGKitLogWarn(@"[%@] SVG ERROR: %@", [self class], [saxError localizedDescription]);
 	[self.errorsFatal addObject:saxError];
 }
 

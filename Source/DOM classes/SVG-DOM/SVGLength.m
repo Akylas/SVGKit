@@ -117,6 +117,14 @@ static float cachedDevicePixelsPerInch;
 	return [self.internalCSSPrimitiveValue getFloatValue:CSS_PX];
 }
 
+-(float) pixelsValueWithDimension:(float)dimension
+{
+    if (self.internalCSSPrimitiveValue.primitiveType == CSS_PERCENTAGE)
+        return dimension * self.value / 100.0;
+    
+    return [self pixelsValue];
+}
+
 -(float) numberValue
 {
 	return [self.internalCSSPrimitiveValue getFloatValue:CSS_NUMBER];
@@ -126,8 +134,8 @@ static float cachedDevicePixelsPerInch;
 
 +(float) pixelsPerInchForCurrentDevice
 {
-	/** Using this as reference: http://en.wikipedia.org/wiki/List_of_displays_by_pixel_density#Apple
-	 */
+	/** Using this as reference: http://en.wikipedia.org/wiki/Retina_Display 
+      */
 	
 	size_t size;
 	sysctlbyname("hw.machine", NULL, &size, NULL, 0);
@@ -141,14 +149,23 @@ static float cachedDevicePixelsPerInch;
 	|| [platform hasPrefix:@"iPhone3"])
 		return 163.0f;
 	
-	if( [platform hasPrefix:@"iPhone4"]
-	|| [platform hasPrefix:@"iPhone5"])
-		return 326.0f;
+    if( [platform hasPrefix:@"iPhone4"]
+       || [platform hasPrefix:@"iPhone5"]
+       || [platform hasPrefix:@"iPhone6"]
+       || [platform hasPrefix:@"iPhone7,2"]
+       || [platform hasPrefix:@"iPhone8,1"]) {
+        return 326.0f;
+    }
+    
+    if ( [platform hasPrefix:@"iPhone7,1"]
+       || [platform hasPrefix:@"iPhone8,2"]) {
+        return 401.0f;
+    }
 	
 	if( [platform hasPrefix:@"iPhone"]) // catch-all for higher-end devices not yet existing
 	{
 		NSAssert(FALSE, @"Not supported yet: you are using an iPhone that didn't exist when this code was written, we have no idea what the pixel count per inch is!");
-		return 326.0f;
+		return 401.0f;
 	}
 	
 	if( [platform hasPrefix:@"iPod1"]
@@ -157,7 +174,8 @@ static float cachedDevicePixelsPerInch;
 		return 163.0f;
 	
 	if( [platform hasPrefix:@"iPod4"]
-	   || [platform hasPrefix:@"iPod5"])
+	   || [platform hasPrefix:@"iPod5"]
+	   || [platform hasPrefix:@"iPod7"])
 		return 326.0f;
 	
 	if( [platform hasPrefix:@"iPod"]) // catch-all for higher-end devices not yet existing
@@ -170,7 +188,8 @@ static float cachedDevicePixelsPerInch;
 	|| [platform hasPrefix:@"iPad2"])
 		return 132.0f;
 	if( [platform hasPrefix:@"iPad3"]
-	|| [platform hasPrefix:@"iPad4"])
+	|| [platform hasPrefix:@"iPad4"]
+    || [platform hasPrefix:@"iPad5"])
 		return 264.0f;
 	if( [platform hasPrefix:@"iPad"]) // catch-all for higher-end devices not yet existing
 	{
@@ -180,7 +199,7 @@ static float cachedDevicePixelsPerInch;
 	
 	if( [platform hasPrefix:@"x86_64"])
 	{
-		DDLogCWarn(@"[%@] WARNING: you are running on the simulator; it's impossible for us to calculate centimeter/millimeter/inches units correctly", [self class]);
+		SVGKitLogWarn(@"[%@] WARNING: you are running on the simulator; it's impossible for us to calculate centimeter/millimeter/inches units correctly", [self class]);
 		return 132.0f; // Simulator, running on desktop machine
 	}
 	

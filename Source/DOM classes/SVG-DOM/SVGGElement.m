@@ -20,11 +20,8 @@
 
 - (void)layoutLayer:(CALayer *)layer {
 	
-	CGRect mainRect = CGRectZero;
-	
-	/** we don't want the rect to be union'd with 0,0, so we need to initialize it to one of the subrects */
-	if( layer.sublayers.count > 0 )
-		mainRect = ((CALayer*)[layer.sublayers objectAtIndex:0]).frame;
+    // null rect union any other rect will return the other rect
+	CGRect mainRect = CGRectNull;
 	
 	/** make mainrect the UNION of all sublayer's frames (i.e. their individual "bounds" inside THIS layer's space) */
 	for ( CALayer *currentLayer in [layer sublayers] )
@@ -39,6 +36,12 @@
 	 AND: bottom-right-corner of this layer will be "the bottom-right corner of the convex-hull rect of all sublayers"
 	 */
 	layer.frame = mainRect;
+    
+    /**
+     If this group layer has a mask then since we've adjusted this layer's frame we need to offset the mask's frame by the opposite amount.
+     */
+    if (layer.mask)
+        layer.mask.frame = CGRectOffset(layer.mask.frame, -mainRect.origin.x, -mainRect.origin.y);
 
 	/** Changing THIS layer's frame now means all DIRECT sublayers are offset by too much (because when we change the offset
 	 of the parent frame (this.frame), Apple *does not* shift the sublayers around to keep them in same place.
@@ -48,12 +51,16 @@
 	 calls where it appears someone at Apple forgot how their API works, and tried to do the offsetting automatically. "Paved
 	 with good intentions...".
 	 	 */
-	for (CALayer *currentLayer in [layer sublayers]) {
-		CGRect frame = currentLayer.frame;
-		frame.origin.x -= mainRect.origin.x;
-		frame.origin.y -= mainRect.origin.y;
-		currentLayer.frame = frame;
-	}
+    if (CGRectIsNull(mainRect)) {
+        // TODO what to do when mainRect is null rect? i.e. no sublayer or all sublayers have null rect frame
+    } else {
+        for (CALayer *currentLayer in [layer sublayers]) {
+            CGRect frame = currentLayer.frame;
+            frame.origin.x -= mainRect.origin.x;
+            frame.origin.y -= mainRect.origin.y;
+            currentLayer.frame = frame;
+        }
+    }
 }
 
 @end
