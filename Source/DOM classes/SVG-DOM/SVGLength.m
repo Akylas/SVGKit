@@ -9,7 +9,7 @@
 #include <sys/sysctl.h>
 
 @interface SVGLength()
-@property(nonatomic,retain) CSSPrimitiveValue* internalCSSPrimitiveValue;
+@property(nonatomic,strong) CSSPrimitiveValue* internalCSSPrimitiveValue;
 @end
 
 @implementation SVGLength
@@ -20,11 +20,6 @@
 @synthesize valueAsString;
 @synthesize internalCSSPrimitiveValue;
 
-- (void)dealloc {
-    self.valueAsString = nil;
-    self.internalCSSPrimitiveValue = nil;
-    [super dealloc];
-}
 
 - (id)init
 {
@@ -94,7 +89,7 @@
 
 +(SVGLength*) svgLengthZero
 {
-	SVGLength* result = [[[SVGLength alloc] initWithCSSPrimitiveValue:nil] autorelease];
+	SVGLength* result = [[SVGLength alloc] initWithCSSPrimitiveValue:nil];
 	
 	return result;
 }
@@ -102,12 +97,12 @@
 static float cachedDevicePixelsPerInch;
 +(SVGLength*) svgLengthFromNSString:(NSString*) s
 {
-	CSSPrimitiveValue* pv = [[[CSSPrimitiveValue alloc] init] autorelease];
+	CSSPrimitiveValue* pv = [[CSSPrimitiveValue alloc] init];
 	
 	pv.pixelsPerInch = cachedDevicePixelsPerInch;
 	pv.cssText = s;
 	
-	SVGLength* result = [[[SVGLength alloc] initWithCSSPrimitiveValue:pv] autorelease];
+	SVGLength* result = [[SVGLength alloc] initWithCSSPrimitiveValue:pv];
 	
 	return result;
 }
@@ -134,7 +129,7 @@ static float cachedDevicePixelsPerInch;
 
 +(float) pixelsPerInchForCurrentDevice
 {
-	/** Using this as reference: http://en.wikipedia.org/wiki/Retina_Display 
+	/** Using this as reference: http://en.wikipedia.org/wiki/Retina_Display and https://www.theiphonewiki.com/wiki/Models
       */
 	
 	size_t size;
@@ -153,18 +148,23 @@ static float cachedDevicePixelsPerInch;
        || [platform hasPrefix:@"iPhone5"]
        || [platform hasPrefix:@"iPhone6"]
        || [platform hasPrefix:@"iPhone7,2"]
-       || [platform hasPrefix:@"iPhone8,1"]) {
+       || [platform hasPrefix:@"iPhone8,1"]
+       || [platform hasPrefix:@"iPhone8,4"]
+       || [platform hasPrefix:@"iPhone9,1"]
+       || [platform hasPrefix:@"iPhone9,3"]) {
         return 326.0f;
     }
     
     if ( [platform hasPrefix:@"iPhone7,1"]
-       || [platform hasPrefix:@"iPhone8,2"]) {
+       || [platform hasPrefix:@"iPhone8,2"]
+       || [platform hasPrefix:@"iPhone9,2"]
+       || [platform hasPrefix:@"iPhone9,4"]) {
         return 401.0f;
     }
 	
 	if( [platform hasPrefix:@"iPhone"]) // catch-all for higher-end devices not yet existing
 	{
-		NSAssert(FALSE, @"Not supported yet: you are using an iPhone that didn't exist when this code was written, we have no idea what the pixel count per inch is!");
+		NSAssert(FALSE, @"Update your source code or disable assertions: you are using an iPhone that didn't exist when this code was written, we have no idea what the pixel count per inch is!");
 		return 401.0f;
 	}
 	
@@ -180,22 +180,39 @@ static float cachedDevicePixelsPerInch;
 	
 	if( [platform hasPrefix:@"iPod"]) // catch-all for higher-end devices not yet existing
 	{
-		NSAssert(FALSE, @"Not supported yet: you are using an iPod that didn't exist when this code was written, we have no idea what the pixel count per inch is!");
+		NSAssert(FALSE, @"Update your source code or disable assertions: you are using an iPod that didn't exist when this code was written, we have no idea what the pixel count per inch is!");
 		return 326.0f;
 	}
 	
+    if( [platform hasPrefix:@"iPad5,1"]
+       || [platform hasPrefix:@"iPad5,2"])
+        return 326.0f;
+    
 	if( [platform hasPrefix:@"iPad1"]
 	|| [platform hasPrefix:@"iPad2"])
 		return 132.0f;
 	if( [platform hasPrefix:@"iPad3"]
 	|| [platform hasPrefix:@"iPad4"]
-    || [platform hasPrefix:@"iPad5"])
+	|| [platform hasPrefix:@"iPad5,3"]
+    || [platform hasPrefix:@"iPad5,4"]
+	|| [platform hasPrefix:@"iPad6"]
+    || [platform hasPrefix:@"iPad7"])
 		return 264.0f;
+    
 	if( [platform hasPrefix:@"iPad"]) // catch-all for higher-end devices not yet existing
 	{
-		NSAssert(FALSE, @"Not supported yet: you are using an iPad that didn't exist when this code was written, we have no idea what the pixel count per inch is!");
+		NSAssert(FALSE, @"Update your source code or disable assertions: you are using an iPad that didn't exist when this code was written, we have no idea what the pixel count per inch is!");
 		return 264.0f;
 	}
+    
+    if( [platform hasPrefix:@"iWatch1"])
+        return 326.0f;
+    
+    if( [platform hasPrefix:@"iWatch"]) // catch-all for higher-end devices not yet existing
+    {
+        NSAssert(FALSE, @"Update your source code or disable assertions: you are using an iWatch that didn't exist when this code was written, we have no idea what the pixel count per inch is!");
+        return 326.0f;
+    }
 	
 	if( [platform hasPrefix:@"x86_64"])
 	{

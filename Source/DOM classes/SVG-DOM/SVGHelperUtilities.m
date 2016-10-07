@@ -121,10 +121,13 @@
 						 For MEET, we have to SHRINK the viewbox's contents if they aren't as wide:high as the viewport:
 						 */
 						CGAffineTransform catRestoreAspectRatio;
-						if( ratioOfRatios > 1 )
-							catRestoreAspectRatio = CGAffineTransformMakeScale( 1.0 / ratioOfRatios, 1.0 );
-						else
-							catRestoreAspectRatio = CGAffineTransformMakeScale( 1.0, 1.0 * ratioOfRatios );
+						if( ratioOfRatios > 1 ) {
+ 							catRestoreAspectRatio = CGAffineTransformMakeScale( 1.0 / ratioOfRatios, 1.0 );
+						} else if (ratioOfRatios != 0) {
+ 							catRestoreAspectRatio = CGAffineTransformMakeScale( 1.0, 1.0 * ratioOfRatios );
+						} else {
+							catRestoreAspectRatio = CGAffineTransformIdentity;
+						}
 						
 						double xTranslationRequired;
 						double yTranslationRequired;
@@ -515,7 +518,7 @@
 
 	if (strokeLayer == fillLayer)
 	{
-		return [strokeLayer retain];
+		return strokeLayer;
 	}
 	CALayer* combined = [CALayer layer];
 	
@@ -526,7 +529,7 @@
 	fillLayer.frame = localRect;
 	[combined addSublayer:fillLayer];
 	[combined addSublayer:strokeLayer];
-	return [combined retain];
+	return combined;
 }
 
 + (SVGGradientLayer*)getGradientLayerWithId:(NSString*)gradId forElement:(SVGElement*)svgElement
@@ -588,42 +591,46 @@
 
 +(void) parsePreserveAspectRatioFor:(Element<SVGFitToViewBox>*) element
 {
-    element.preserveAspectRatio = [[SVGAnimatedPreserveAspectRatio new] autorelease]; // automatically sets defaults
+    element.preserveAspectRatio = [SVGAnimatedPreserveAspectRatio new]; // automatically sets defaults
     
     NSString* stringPreserveAspectRatio = [element getAttribute:@"preserveAspectRatio"];
-    NSArray* aspectRatioCommands = [stringPreserveAspectRatio componentsSeparatedByString:@" "];
     
-    for( NSString* aspectRatioCommand in aspectRatioCommands )
+    if( stringPreserveAspectRatio.length > 0 )
     {
-        if( [aspectRatioCommand isEqualToString:@"meet"]) /** NB this is default anyway. Dont technically need to set it */
-            element.preserveAspectRatio.baseVal.meetOrSlice = SVG_MEETORSLICE_MEET;
-        else if( [aspectRatioCommand isEqualToString:@"slice"])
-            element.preserveAspectRatio.baseVal.meetOrSlice = SVG_MEETORSLICE_SLICE;
+        NSArray* aspectRatioCommands = [stringPreserveAspectRatio componentsSeparatedByString:@" "];
         
-        else if( [aspectRatioCommand isEqualToString:@"xMinYMin"])
-            element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMINYMIN;
-        else if( [aspectRatioCommand isEqualToString:@"xMinYMid"])
-            element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMINYMID;
-        else if( [aspectRatioCommand isEqualToString:@"xMinYMax"])
-            element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMINYMAX;
-        
-        else if( [aspectRatioCommand isEqualToString:@"xMidYMin"])
-            element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMIDYMIN;
-        else if( [aspectRatioCommand isEqualToString:@"xMidYMid"])
-            element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMIDYMID;
-        else if( [aspectRatioCommand isEqualToString:@"xMidYMax"])
-            element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMIDYMAX;
-        
-        else if( [aspectRatioCommand isEqualToString:@"xMaxYMin"])
-            element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMAXYMIN;
-        else if( [aspectRatioCommand isEqualToString:@"xMaxYMid"])
-            element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMAXYMID;
-        else if( [aspectRatioCommand isEqualToString:@"xMaxYMax"])
-            element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMAXYMAX;
-        
-        else
+        for( NSString* aspectRatioCommand in aspectRatioCommands )
         {
-            SVGKitLogWarn(@"Found unexpected preserve-aspect-ratio command inside element's 'preserveAspectRatio' attribute. Command = '%@'", aspectRatioCommand );
+            if( [aspectRatioCommand isEqualToString:@"meet"]) /** NB this is default anyway. Dont technically need to set it */
+                element.preserveAspectRatio.baseVal.meetOrSlice = SVG_MEETORSLICE_MEET;
+            else if( [aspectRatioCommand isEqualToString:@"slice"])
+                element.preserveAspectRatio.baseVal.meetOrSlice = SVG_MEETORSLICE_SLICE;
+            
+            else if( [aspectRatioCommand isEqualToString:@"xMinYMin"])
+                element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMINYMIN;
+            else if( [aspectRatioCommand isEqualToString:@"xMinYMid"])
+                element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMINYMID;
+            else if( [aspectRatioCommand isEqualToString:@"xMinYMax"])
+                element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMINYMAX;
+            
+            else if( [aspectRatioCommand isEqualToString:@"xMidYMin"])
+                element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMIDYMIN;
+            else if( [aspectRatioCommand isEqualToString:@"xMidYMid"])
+                element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMIDYMID;
+            else if( [aspectRatioCommand isEqualToString:@"xMidYMax"])
+                element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMIDYMAX;
+            
+            else if( [aspectRatioCommand isEqualToString:@"xMaxYMin"])
+                element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMAXYMIN;
+            else if( [aspectRatioCommand isEqualToString:@"xMaxYMid"])
+                element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMAXYMID;
+            else if( [aspectRatioCommand isEqualToString:@"xMaxYMax"])
+                element.preserveAspectRatio.baseVal.align = SVG_PRESERVEASPECTRATIO_XMAXYMAX;
+            
+            else
+            {
+                SVGKitLogWarn(@"Found unexpected preserve-aspect-ratio command inside element's 'preserveAspectRatio' attribute. Command = '%@'", aspectRatioCommand );
+            }
         }
     }
 }

@@ -187,14 +187,6 @@
             ((SVGElement *) child).viewportElement = viewport;
 }
 
-- (void)dealloc {
-	[_stringValue release];
-	[_identifier release];
-	[xmlbase release];
-	self.className = nil;
-    self.style = nil;
-	[super dealloc];
-}
 
 - (void)loadDefaults {
 	// to be overriden by subclasses
@@ -218,7 +210,7 @@
 	/** CSS styles and classes */
 	if ( [self getAttributeNode:@"style"] )
 	{
-		self.style = [[[CSSStyleDeclaration alloc] init] autorelease];
+		self.style = [[CSSStyleDeclaration alloc] init];
 		self.style.cssText = [self getAttribute:@"style"]; // causes all the LOCALLY EMBEDDED style info to be parsed
 	}
 	if( [self getAttributeNode:@"class"])
@@ -282,7 +274,8 @@
 				return;
 			}
 			NSString* command = [transformString substringToIndex:loc.location];
-			NSArray* parameterStrings = [[transformString substringFromIndex:loc.location+1] componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@", "]];
+            NSString* rawParametersString = [transformString substringFromIndex:loc.location+1];
+			NSArray* parameterStrings = [rawParametersString componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@", "]];
 			
 			/** if you get ", " (comma AND space), Apple sends you an extra 0-length match - "" - between your args. We strip that here */
 			parameterStrings = [parameterStrings filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
@@ -574,9 +567,9 @@
 	 
 	 http://www.w3.org/TR/SVG/propidx.html
 	 
-	 For each of those, the implementaiton is the same.
+	 For each of those, the implementation is the same.
 	 
-	 ********* WAWRNING: THE CURRENT IMPLEMENTATION BELOW IS VEYR MUCH INCOMPLETE, BUT IT WORKS FOR VERY SIMPLE SVG'S ************
+	 ********* WAWRNING: THE CURRENT IMPLEMENTATION BELOW IS VERY MUCH INCOMPLETE, BUT IT WORKS FOR VERY SIMPLE SVG'S ************
 	 */
     NSString* localStyleValue = [self.style getPropertyValue:stylableProperty];
     
@@ -628,8 +621,7 @@
     
     if( inherit )
     {
-        /** Finally: move up the tree until you find a <G> node, and ask it to provide the value
-         OR: if you find an <SVG> tag before you find a <G> tag, give up
+        /** Finally: move up the tree until you find a <G> or <SVG> node, and ask it to provide the value
          */
         
         Node* parentElement = self.parentNode;
@@ -640,9 +632,10 @@
             parentElement = parentElement.parentNode;
         }
         
-        if( parentElement == nil
-           || [parentElement isKindOfClass:[SVGSVGElement class]] )
+        if( parentElement == nil )
+        {
             return nil; // give up!
+        }
         else
         {
             return [((SVGElement*)parentElement) cascadedValueForStylableProperty:stylableProperty];

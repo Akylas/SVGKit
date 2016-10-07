@@ -12,7 +12,7 @@
  (each time you zoom in, we want to re-render the SVG as a higher-resolution set of pixels)
  
  We use the exact same method names as UIImage, and try to be literally as identical as possible.
- 
+
  Creating an SVGKImage:
  
  - PREFERRED: use the "imageNamed:" method
@@ -62,16 +62,16 @@ typedef void (^SVGKImageAsynchronousLoadingDelegate)(SVGKImage* loadedImage, SVG
  
  NB you can get MUCH BETTER performance using the methods such as exportUIImageAntiAliased and exportNSDataAntiAliased
  */
-@property (nonatomic, readonly) UIImage* UIImage;
+@property (weak, nonatomic, readonly) UIImage* UIImage;
 
-@property (nonatomic, retain, readonly) SVGKSource* source;
-@property (nonatomic, retain, readonly) SVGKParseResult* parseErrorsAndWarnings;
+@property (nonatomic, strong, readonly) SVGKSource* source;
+@property (nonatomic, strong, readonly) SVGKParseResult* parseErrorsAndWarnings;
 
-@property (nonatomic, retain, readonly) SVGDocument* DOMDocument;
-@property (nonatomic, retain, readonly) SVGSVGElement* DOMTree; // needs renaming + (possibly) replacing by DOMDocument
-@property (nonatomic, retain, readonly) CALayer* CALayerTree;
+@property (nonatomic, strong, readonly) SVGDocument* DOMDocument;
+@property (nonatomic, strong, readonly) SVGSVGElement* DOMTree; // needs renaming + (possibly) replacing by DOMDocument
+@property (nonatomic, strong, readonly) CALayer* CALayerTree;
 #if ENABLE_GLOBAL_IMAGE_CACHE_FOR_SVGKIMAGE_IMAGE_NAMED
-@property (nonatomic, retain, readonly) NSString* nameUsedToInstantiate;
+@property (nonatomic, strong, readonly) NSString* nameUsedToInstantiate;
 #endif
 
 #pragma mark - methods to quick load an SVG as an image
@@ -89,6 +89,7 @@ typedef void (^SVGKImageAsynchronousLoadingDelegate)(SVGKImage* loadedImage, SVG
  - Creates an SVGKSource so that you can later inspect exactly where it found the file
  */
 + (SVGKImage *)imageNamed:(NSString *)name;
++ (SVGKImage *)imageNamed:(NSString *)name inBundle:(NSBundle *)bundle;
 /**
  Almost identical to imageNamed: except that it performs the parse in a separate thread.
  
@@ -99,6 +100,22 @@ typedef void (^SVGKImageAsynchronousLoadingDelegate)(SVGKImage* loadedImage, SVG
  */
 +(SVGKParser *) imageAsynchronouslyNamed:(NSString *)name onCompletion:(SVGKImageAsynchronousLoadingDelegate) blockCompleted;
 + (SVGKImage *)imageWithContentsOfFile:(NSString *)path;
++ (SVGKImage*) imageWithContentsOfFileAsynchronously:(NSString *)aPath onCompletion:(SVGKImageAsynchronousLoadingDelegate)blockCompleted;
+
+/**
+ PREFERABLY: these are our only method, apart from the convenience "imageNamed"
+ 
+ Creating an SVG from raw data; this is not recommended: SVG requires knowledge 
+ of at least the URL where it came from (as it can contain relative file-links internally).
+
+ If you need to create an SVG e.g. directly from raw bytes, then you MUST use
+ this method and ADDITIONALLY wrap your data into an SVGKSource.
+ 
+ This is because SVG's cannot parse correctly without the metadata about where
+ the file came from: e.g. they cannot process relative links, cross-references, etc.
+ */
++(SVGKImage*) imageWithData:(NSData *)newNSData; // if you have custom source's you want to use
++ (SVGKImage*) imageWithDataAsynchronously:(NSData *)newNSData onCompletion:(SVGKImageAsynchronousLoadingDelegate)blockCompleted;
 
 /**
  PREFERABLY: these are our only method, apart from the convenience "imageNamed"

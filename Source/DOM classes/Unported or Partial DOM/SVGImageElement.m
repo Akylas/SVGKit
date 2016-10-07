@@ -34,7 +34,7 @@ CGImageRef SVGImageCGImage(AppleNativeImageRef img)
 }
 
 @interface SVGImageElement()
-@property (nonatomic, retain, readwrite) NSString *href;
+@property (nonatomic, strong, readwrite) NSString *href;
 @end
 
 @implementation SVGImageElement
@@ -50,11 +50,6 @@ CGImageRef SVGImageCGImage(AppleNativeImageRef img)
 
 @synthesize href = _href;
 
-- (void)dealloc {
-    [_href release], _href = nil;
-
-    [super dealloc];
-}
 
 - (void)postProcessAttributesAddingErrorsTo:(SVGKParseResult *)parseResult {
 	[super postProcessAttributesAddingErrorsTo:parseResult];
@@ -80,7 +75,7 @@ CGImageRef SVGImageCGImage(AppleNativeImageRef img)
 
 - (CALayer *) newLayer
 {
-	CALayer* newLayer = [[CALayerWithClipRender layer] retain];
+	CALayer* newLayer = [CALayerWithClipRender layer];
 	
 	[SVGHelperUtilities configureCALayer:newLayer usingElement:self];
 	
@@ -157,7 +152,7 @@ CGImageRef SVGImageCGImage(AppleNativeImageRef img)
             self.viewBox = SVGRectMake(0, 0, _width, _height);
         
         CGImageRef imageRef = SVGImageCGImage(image);
-        
+        BOOL imageRefHasBeenRetained = false; // only one codepath CREATES a new image, because of Apple's API; the rest use an existing reference
         // apply preserveAspectRatio
         if( self.preserveAspectRatio.baseVal.align != SVG_PRESERVEASPECTRATIO_NONE
            && ABS( self.aspectRatioFromWidthPerHeight - self.aspectRatioFromViewBox) > 0.00001 )
@@ -174,6 +169,7 @@ CGImageRef SVGImageCGImage(AppleNativeImageRef img)
                 CGRect cropRect = CGRectMake(0, 0, image.size.width, image.size.height);
                 cropRect = [self clipFrame:cropRect fromRatio:1.0 / ratioOfRatios];
                 imageRef = CGImageCreateWithImageInRect(imageRef, cropRect);
+                imageRefHasBeenRetained = true;
             }
         }
         
@@ -181,7 +177,9 @@ CGImageRef SVGImageCGImage(AppleNativeImageRef img)
         frame = CGRectApplyAffineTransform(frame, [SVGHelperUtilities transformAbsoluteIncludingViewportForTransformableOrViewportEstablishingElement:self]);
         newLayer.frame = frame;
         
-        newLayer.contents = (id)imageRef;
+        newLayer.contents = (__bridge id)imageRef;
+        if( imageRefHasBeenRetained )
+            CGImageRelease( imageRef );
 	}
 		
 #if OLD_CODE
