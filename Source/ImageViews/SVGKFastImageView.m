@@ -250,10 +250,10 @@
         CGFloat boundedAspectRatio = self.bounds.size.width / self.bounds.size.height;
         if (nativeAspectRatio >= boundedAspectRatio) {
           scaleConvertImageToView = CGSizeMake( self.bounds.size.width / imageBounds.size.width, self.bounds.size.width *  nativeAspectRatio / imageBounds.size.height );
-          translateSize = CGSizeMake(0, (self.bounds.size.height - self.bounds.size.width)/2.0f);
+          translateSize = CGSizeMake(0, (self.bounds.size.height - self.bounds.size.width / nativeAspectRatio)/2.0f);
  } else {
           scaleConvertImageToView = CGSizeMake( self.bounds.size.height *  nativeAspectRatio / imageBounds.size.width, self.bounds.size.height / imageBounds.size.height );
-   translateSize = CGSizeMake((self.bounds.size.width - self.bounds.size.height)/2.0f, 0);
+   translateSize = CGSizeMake((self.bounds.size.width - self.bounds.size.height * nativeAspectRatio)/2.0f, 0);
         }
         break;
       }
