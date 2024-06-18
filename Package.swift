@@ -1,4 +1,4 @@
-// swift-tools-version:5.1
+// swift-tools-version:5.3
 import PackageDescription
 
 let package = Package(
@@ -19,7 +19,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.7.0"))
+        .package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMajor(from: "3.7.0"))
     ],
     targets: [
         .target(
@@ -30,6 +30,11 @@ let package = Package(
             path: "Source",
             exclude: [
                 "SwiftUI additions"
+            ],
+            resources: [.process("Resources/PrivacyInfo.xcprivacy")],
+            publicHeadersPath: "include",
+            cSettings: [
+                .headerSearchPath("privateHeaders")
             ]
         ),
         .target(
