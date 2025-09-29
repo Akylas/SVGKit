@@ -326,6 +326,33 @@
                 break;
             }
         }
+
+        // Some SVGs specify font name instead of family name
+        if (!matchedFontFamily) {
+            // If we didn't find the font family, we'll search the family based on the font name
+            for (NSString *familyName in availableFontFamilies) {
+                #if SVGKIT_MAC
+                NSArray<NSArray *> *members = [NSFontManager.sharedFontManager availableMembersOfFontFamily:familyName];
+                for (NSArray *member in members) {
+                    // Each member has the format: [fontName, weight, traits, size]
+                    if (member.count > 0) {
+                        NSString *fontName = member[0];
+                        if ([actualFontFamilies containsObject:fontName]) {
+                            matchedFontFamily = familyName;
+                            break;
+                        }
+                    }
+                }
+#else
+                for (NSString *fontName in [UIFont fontNamesForFamilyName:familyName]) {
+                    if ([actualFontFamilies containsObject:fontName]) {
+                        matchedFontFamily = familyName;
+                        break;
+                    }
+                }
+#endif
+            }
+        }
     }
     
     // we provide enough hint information, let Core Text using their algorithm to detect which fontName should be used
@@ -424,7 +451,7 @@
         // delete ""
         NSString *fontFamily = [arg stringByReplacingOccurrencesOfString:@"\"" withString:@""];
         // trim white space
-        [fontFamily stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        fontFamily = [fontFamily stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
         [fontFamilies addObject:fontFamily];
     }
     
