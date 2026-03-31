@@ -249,11 +249,13 @@
         CGFloat nativeAspectRatio = imageBounds.size.width / imageBounds.size.height;
         CGFloat boundedAspectRatio = self.bounds.size.width / self.bounds.size.height;
         if (nativeAspectRatio >= boundedAspectRatio) {
-          scaleConvertImageToView = CGSizeMake( self.bounds.size.width / imageBounds.size.width, self.bounds.size.width *  nativeAspectRatio / imageBounds.size.height );
-          translateSize = CGSizeMake(0, (self.bounds.size.height - self.bounds.size.width / nativeAspectRatio)/2.0f);
- } else {
-          scaleConvertImageToView = CGSizeMake( self.bounds.size.height *  nativeAspectRatio / imageBounds.size.width, self.bounds.size.height / imageBounds.size.height );
-   translateSize = CGSizeMake((self.bounds.size.width - self.bounds.size.height * nativeAspectRatio)/2.0f, 0);
+            float scale = self.bounds.size.width / imageBounds.size.width;
+            scaleConvertImageToView = CGSizeMake( scale, scale );
+            translateSize = CGSizeMake(0, (self.bounds.size.height - scale *  imageBounds.size.height)/2.0f);
+        } else {
+            float scale = self.bounds.size.height / imageBounds.size.height;
+            scaleConvertImageToView = CGSizeMake( scale, scale );
+            translateSize = CGSizeMake((self.bounds.size.width - imageBounds.size.height * scale)/2.0f, 0);
         }
         break;
       }
